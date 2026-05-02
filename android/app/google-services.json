@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "441380081715",
+    "project_id": "jgb-codezpark",
+    "storage_bucket": "jgb-codezpark.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:441380081715:android:4d6200b6db21eb9a36d346",
+        "android_client_info": {
+          "package_name": "com.example.jbg_notification"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBHKENqH_IZZ_KXNtAB5rsWECc9nFcAa0E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
