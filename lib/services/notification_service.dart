@@ -4,6 +4,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'api_service.dart';
+
 /// NotificationService
 /// - Handles FCM token retrieval, refresh handling and forwarding tokens to backend.
 /// - Also listens to foreground messages and prints/shows them if a navigatorKey is provided.
@@ -84,8 +86,8 @@ class NotificationService {
     try {
       debugPrint('Sending token to server: $token');
 
-      // Example endpoint - replace with your real API endpoint
-      final uri = Uri.parse('https://api.jbggola.com/api/device-token');
+      // Replace with your real API endpoint
+      final uri = Uri.parse('${ApiService.baseUrl}/device-token');
 
       final headers = <String, String>{
         'Content-Type': 'application/json',

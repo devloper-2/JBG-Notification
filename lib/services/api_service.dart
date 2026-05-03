@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://api.jbggola.com/api';
+  static const String baseUrl = 'http://192.168.1.9:8765/api';
 
   Future<Map<String, String>> _getHeaders() async {
     final prefs = await SharedPreferences.getInstance();
@@ -96,6 +96,26 @@ class ApiService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to load outlet orders: ${response.statusCode}');
+    }
+  }
+
+  /// Get Day End (Daily Balance Sheet) Data
+  Future<Map<String, dynamic>> getDailyBalanceSheet(int customerId, {
+    String? startDate,
+    String? endDate,
+  }) async {
+    final headers = await _getHeaders();
+    final Map<String, String> queryParams = {};
+    if (startDate != null && startDate.isNotEmpty) queryParams['start_date'] = startDate;
+    if (endDate != null && endDate.isNotEmpty) queryParams['end_date'] = endDate;
+
+    final uri = Uri.parse('$baseUrl/daily-balance-sheet/$customerId').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load balance sheet: ${response.statusCode}');
     }
   }
 }

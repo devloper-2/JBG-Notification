@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'main.dart'; // To access LoginPage if needed or just use PushReplacement
 import 'services/api_service.dart';
+import 'widgets/filter_screen.dart';
+import 'day_end_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,6 +18,8 @@ class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
   Map<String, dynamic>? _user;
   bool _isAdmin = false;
+
+  List<dynamic> _outlets = [];
 
   @override
   void initState() {
@@ -32,37 +36,78 @@ class _HomePageState extends State<HomePage> {
           _user = jsonDecode(userStr);
           _isAdmin = _user?['is_admin'] == 1 || _user?['is_admin'] == true;
         });
+        if (_isAdmin) {
+          _loadOutlets();
+        }
       }
+    }
+  }
+
+  Future<void> _loadOutlets() async {
+    try {
+      final ApiService apiService = ApiService();
+      final outlets = await apiService.getOutlets();
+      if (mounted) {
+        setState(() {
+          _outlets = outlets;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading outlets in home: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(_currentIndex == 0 ? 'Orders' : 'Settings'),
+        title: Text(
+          _currentIndex == 0 ? 'Orders' : _currentIndex == 1 ? 'Day End' : 'Settings',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: -0.5),
+        ),
+        centerTitle: false,
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.0),
+          child: Container(color: Colors.black12, height: 1.0),
+        ),
       ),
-      body: _currentIndex == 0 ? _HomeContent(user: _user, isAdmin: _isAdmin) : const _SettingsContent(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.receipt_long),
-            label: 'Orders',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
+      body: _currentIndex == 0 ? _HomeContent(user: _user, isAdmin: _isAdmin) : 
+            _currentIndex == 1 ? DayEndPage(user: _user, isAdmin: _isAdmin, outlets: _outlets) : 
+            const _SettingsContent(),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Colors.black12, width: 1.0)),
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.white,
+          selectedItemColor: Colors.black,
+          unselectedItemColor: Colors.black45,
+          elevation: 0,
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long),
+              label: 'Orders',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bar_chart),
+              label: 'Day End',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -89,6 +134,11 @@ class _HomeContentState extends State<_HomeContent> {
   String _paymentMethod = 'all';
   String _status = 'all';
   String _orderType = 'all';
+  DateTime? _startDate;
+  DateTime? _endDate;
+  
+  double _totalAmount = 0.0;
+  int _totalOrdersCount = 0;
 
   @override
   void initState() {
@@ -145,32 +195,45 @@ class _HomeContentState extends State<_HomeContent> {
 
     try {
       Map<String, dynamic> resp;
+      
+      String? startStr = _startDate != null ? "${_startDate!.year}-${_startDate!.month.toString().padLeft(2, '0')}-${_startDate!.day.toString().padLeft(2, '0')}" : null;
+      String? endStr = _endDate != null ? "${_endDate!.year}-${_endDate!.month.toString().padLeft(2, '0')}-${_endDate!.day.toString().padLeft(2, '0')}" : null;
+
       if (widget.isAdmin) {
         resp = await _apiService.getOrdersByOutlet(
           _selectedOutletId!,
           paymentMethod: _paymentMethod,
           status: _status,
           orderType: _orderType,
+          startDate: startStr,
+          endDate: endStr,
         );
-        if (mounted) {
-          setState(() {
-            _orders = resp['data'] ?? [];
-            _isLoading = false;
-          });
-        }
       } else {
         resp = await _apiService.getOrders(
           _selectedOutletId!,
           paymentMethod: _paymentMethod,
           status: _status,
           orderType: _orderType,
+          startDate: startStr,
+          endDate: endStr,
         );
-        if (mounted) {
-          setState(() {
-            _orders = resp['data'] ?? [];
-            _isLoading = false;
-          });
-        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _orders = resp['data'] ?? [];
+          if (resp['aggregates'] != null) {
+            _totalAmount = double.tryParse(resp['aggregates']['total_amount']?.toString() ?? '0') ?? 0.0;
+            _totalOrdersCount = int.tryParse(resp['aggregates']['total_orders']?.toString() ?? '0') ?? _orders.length;
+          } else {
+            _totalOrdersCount = _orders.length;
+            _totalAmount = _orders.fold(0.0, (sum, item) {
+              final amount = double.tryParse(item['final_total']?.toString() ?? '0') ?? 0.0;
+              return sum + amount;
+            });
+          }
+          _isLoading = false;
+        });
       }
     } catch (e) {
       debugPrint('Error loading orders: $e');
@@ -183,83 +246,31 @@ class _HomeContentState extends State<_HomeContent> {
     }
   }
 
-  void _showFilterModal() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  void _showFilterModal() async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => FilterScreen(
+          initialPaymentMethod: _paymentMethod,
+          initialStatus: _status,
+          initialOrderType: _orderType,
+          initialStartDate: _startDate,
+          initialEndDate: _endDate,
+        ),
       ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Filters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _paymentMethod,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Payment Method'),
-                    items: const [
-                      DropdownMenuItem(value: 'all', child: Text('All')),
-                      DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                      DropdownMenuItem(value: 'card', child: Text('Card')),
-                      DropdownMenuItem(value: 'swigy', child: Text('Swiggy')),
-                      DropdownMenuItem(value: 'zomato', child: Text('Zomato')),
-                      DropdownMenuItem(value: 'online', child: Text('Online')),
-                    ],
-                    onChanged: (v) => setModalState(() => _paymentMethod = v!),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: _status,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Status'),
-                    items: const [
-                      DropdownMenuItem(value: 'all', child: Text('All')),
-                      DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                      DropdownMenuItem(value: 'preparing', child: Text('Preparing')),
-                      DropdownMenuItem(value: 'ready', child: Text('Ready')),
-                      DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                      DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
-                    ],
-                    onChanged: (v) => setModalState(() => _status = v!),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: _orderType,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Order Type'),
-                    items: const [
-                      DropdownMenuItem(value: 'all', child: Text('All')),
-                      DropdownMenuItem(value: 'dine_in', child: Text('Dine In')),
-                      DropdownMenuItem(value: 'takeaway', child: Text('Takeaway')),
-                      DropdownMenuItem(value: 'delivery', child: Text('Delivery')),
-                    ],
-                    onChanged: (v) => setModalState(() => _orderType = v!),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _loadOrders();
-                      },
-                      child: const Text('Apply Filters'),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
     );
+
+    if (result != null && mounted) {
+      setState(() {
+        _paymentMethod = result['paymentMethod'];
+        _status = result['status'];
+        _orderType = result['orderType'];
+        _startDate = result['startDate'];
+        _endDate = result['endDate'];
+      });
+      _loadOrders();
+    }
   }
 
   @override
@@ -269,50 +280,97 @@ class _HomeContentState extends State<_HomeContent> {
         // Top section with Outlet Selector and Filter Button
         Container(
           color: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: Row(
             children: [
               if (widget.isAdmin)
                 Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<int>(
-                      isExpanded: true,
-                      value: _selectedOutletId,
-                      hint: const Text('Select Outlet'),
-                      items: _outlets.where((o) => o['id'] != null).map<DropdownMenuItem<int>>((outlet) {
-                        return DropdownMenuItem<int>(
-                          value: outlet['id'] is int ? outlet['id'] : int.tryParse(outlet['id'].toString()),
-                          child: Text(outlet['name'] ?? 'Unknown Outlet'),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        setState(() {
-                          _selectedOutletId = val;
-                        });
-                        if (val != null) {
-                          _loadOrders();
-                        }
-                      },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.black26),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        isExpanded: true,
+                        value: _selectedOutletId,
+                        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black),
+                        hint: const Text('Select Outlet', style: TextStyle(color: Colors.black54)),
+                        style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
+                        items: _outlets.where((o) => o['id'] != null).map<DropdownMenuItem<int>>((outlet) {
+                          return DropdownMenuItem<int>(
+                            value: outlet['id'] is int ? outlet['id'] : int.tryParse(outlet['id'].toString()),
+                            child: Text(outlet['name'] ?? 'Unknown Outlet'),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedOutletId = val;
+                          });
+                          if (val != null) {
+                            _loadOrders();
+                          }
+                        },
+                      ),
                     ),
                   ),
                 )
               else
-                Expanded(
+                const Expanded(
                   child: Text(
                     'My Orders',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo.shade900),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black, letterSpacing: -0.5),
                   ),
                 ),
-              const SizedBox(width: 10),
-              IconButton(
-                onPressed: _showFilterModal,
-                icon: const Icon(Icons.filter_list),
-                tooltip: 'Filter Options',
+              const SizedBox(width: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  onPressed: _showFilterModal,
+                  icon: const Icon(Icons.filter_list, color: Colors.white),
+                  tooltip: 'Filter Options',
+                ),
               )
             ],
           ),
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: Colors.black12),
+        // Summary Section
+        if (!_isLoading && _orders.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            color: Colors.white,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Total Orders', style: TextStyle(color: Colors.black54, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text('$_totalOrdersCount', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Colors.black)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('Total Amount', style: TextStyle(color: Colors.black54, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '₹${_totalAmount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Colors.black),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        if (!_isLoading && _orders.isNotEmpty)
+          const Divider(height: 1, color: Colors.black12),
         // Orders List Section
         Expanded(
           child: _isLoading
@@ -332,44 +390,102 @@ class _HomeContentState extends State<_HomeContent> {
                         final payment = order['payment_method'] ?? 'cash';
                         final type = order['order_type'] ?? 'takeaway';
                         final ordStatus = order['status'] ?? 'pending';
+                        final orderDateStr = order['order_datetime'];
+                        String formattedDate = '';
+                        if (orderDateStr != null && orderDateStr.toString().isNotEmpty) {
+                          try {
+                            final dt = DateTime.parse(orderDateStr.toString());
+                            formattedDate = "\n${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+                          } catch (_) {}
+                        }
 
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            title: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    customerName,
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                Text(
-                                  '₹$amount',
-                                  style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            subtitle: Column(
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.black12, width: 1.5),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const SizedBox(height: 8),
-                                Text('Type: $type | Payment: $payment'),
-                                const SizedBox(height: 4),
                                 Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(Icons.circle, size: 10, color: _getStatusColor(ordStatus)),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      ordStatus.toUpperCase(),
-                                      style: TextStyle(
-                                        color: _getStatusColor(ordStatus),
-                                        fontWeight: FontWeight.bold,
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            customerName,
+                                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black, letterSpacing: -0.3),
+                                          ),
+                                          if (formattedDate.isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 4.0),
+                                              child: Text(
+                                                formattedDate.trim(),
+                                                style: const TextStyle(color: Colors.black54, fontSize: 13, fontWeight: FontWeight.w500),
+                                              ),
+                                            ),
+                                        ],
                                       ),
+                                    ),
+                                    Text(
+                                      '₹$amount',
+                                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                const Divider(height: 1, color: Colors.black12),
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: Colors.black26),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        type.toString().toUpperCase(),
+                                        style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        payment.toString().toUpperCase(),
+                                        style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.circle, size: 8, color: _getStatusColor(ordStatus)),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          ordStatus.toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.black87,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 12,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -464,11 +580,11 @@ class _SettingsContent extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.settings, size: 64, color: Colors.grey),
+          const Icon(Icons.settings_outlined, size: 64, color: Colors.black87),
           const SizedBox(height: 16),
-          const Text('Settings', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          const Text('Account Settings', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
           const SizedBox(height: 32),
-          ElevatedButton.icon(
+          OutlinedButton.icon(
             onPressed: () async {
               // Logout action
               final prefs = await SharedPreferences.getInstance();
@@ -488,11 +604,11 @@ class _SettingsContent extends StatelessWidget {
               }
             },
             icon: const Icon(Icons.logout),
-            label: const Text('Logout'),
-            style: ElevatedButton.styleFrom(
+            label: const Text('LOG OUT', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1)),
+            style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              backgroundColor: Colors.red.shade50,
-              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.black87, width: 2),
+              foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ],
