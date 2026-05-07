@@ -1,14 +1,14 @@
 import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_service.dart';
+import '../firebase_options.dart';
 
-/// NotificationService
-/// - Handles FCM token retrieval, refresh handling and forwarding tokens to backend.
-/// - Also listens to foreground messages and prints/shows them if a navigatorKey is provided.
 class NotificationService {
   NotificationService._();
 
@@ -16,35 +16,19 @@ class NotificationService {
 
   final FirebaseMessaging _fm = FirebaseMessaging.instance;
   GlobalKey<NavigatorState>? _navigatorKey;
-  String? _lastAccessToken;
 
-  /// Initialize listeners. Pass an optional [navigatorKey] to display dialogs/snackbars.
   void init({GlobalKey<NavigatorState>? navigatorKey}) {
     _navigatorKey = navigatorKey;
 
-    // Listen for foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      // Handle foreground messages here. For now, print and show a simple dialog/snack.
-      debugPrint('FCM onMessage: ${message.notification?.title} - ${message.notification?.body}');
-
-      if (_navigatorKey?.currentState != null) {
-        final overlayState = _navigatorKey!.currentState!.overlay;
-        if (overlayState != null) {
-          final ctx = overlayState.context;
-          final title = message.notification?.title ?? 'Notification';
-          final body = message.notification?.body ?? '';
-
-          // Schedule UI work to avoid any sync context issues.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ScaffoldMessenger.of(ctx).showSnackBar(
-              SnackBar(content: Text('$title: $body')),
-            );
-          });
-        }
-      }
+      debugPrint(
+        'FCM onMessage: ${message.notification?.title} - ${message.notification?.body}',
+      );
+      _showSnackBar(
+        '${message.notification?.title ?? 'Notification'}: ${message.notification?.body ?? ''}',
+      );
     });
 
-    // Handle token refreshes
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
       debugPrint('FCM token refreshed: $newToken');
       if (newToken.isNotEmpty) {
@@ -53,62 +37,73 @@ class NotificationService {
     });
   }
 
-  /// Request permission (iOS and Android T+) and get the current FCM token.
-  /// If [accessToken] is provided, it's stored and used when calling backend.
-  Future<String?> requestPermissionAndGetToken({String? accessToken}) async {
-    _lastAccessToken = accessToken;
+  void _showSnackBar(String message) {
+    final overlayState = _navigatorKey?.currentState?.overlay;
+    if (overlayState == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ScaffoldMessenger.of(overlayState.context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    });
+  }
 
-    // Request permissions (iOS and Android 13+)
-    NotificationSettings settings = await _fm.requestPermission(
+  Future<String?> requestPermissionAndGetToken() async {
+    final settings = await _fm.requestPermission(
       alert: true,
       badge: true,
       sound: true,
       provisional: false,
     );
 
-    debugPrint('User granted permission: ${settings.authorizationStatus}');
+    debugPrint('Notification permission: ${settings.authorizationStatus}');
 
-    // Get the token
-    final token = await _fm.getToken();
+    String? token;
+    if (kIsWeb) {
+      token = await _fm.getToken(vapidKey: firebaseWebVapidKey);
+    } else {
+      token = await _fm.getToken();
+    }
+
     debugPrint('FCM token: $token');
 
     if (token != null && token.isNotEmpty) {
-      // Send to your backend
       await sendTokenToServer(token);
     }
 
     return token;
   }
 
-  /// Send the device token to backend API.
-  /// This is a dummy/example implementation; update the endpoint to your real one.
   Future<void> sendTokenToServer(String token) async {
     try {
-      debugPrint('Sending token to server: $token');
+      // Always read the latest token from storage so this works after page refresh
+      // and when onTokenRefresh fires outside of a login flow.
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString('accessToken');
 
-      // Replace with your real API endpoint
-      final uri = Uri.parse('${ApiService.baseUrl}/device-token');
-
-      final headers = <String, String>{
-        'Content-Type': 'application/json',
-      };
-
-      if (_lastAccessToken != null) {
-        headers['Authorization'] = 'Bearer $_lastAccessToken';
+      if (accessToken == null) {
+        debugPrint('Skipping token send — not logged in yet');
+        return;
       }
 
-      final body = jsonEncode({
-        'device_token': token,
-        'platform': "flutter",
-      });
+      debugPrint('Sending FCM token to server: $token');
 
-      // Example POST - you should handle response codes and errors as needed
-      final resp = await http.post(uri, headers: headers, body: body).timeout(
-            const Duration(seconds: 10),
-          );
+      final uri = Uri.parse('${ApiService.baseUrl}/device-token');
+      final resp = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $accessToken',
+            },
+            body: jsonEncode({
+              'device_token': token,
+              'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        debugPrint('Token registered on server successfully');
+        debugPrint('FCM token registered on server successfully');
       } else {
         debugPrint('Failed registering token: ${resp.statusCode} ${resp.body}');
       }

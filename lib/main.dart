@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -9,14 +10,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'home_page.dart';
 import 'services/notification_service.dart';
 import 'services/api_service.dart';
+import 'firebase_options.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp();
-    // Initialize notification service with navigatorKey so it can show UI
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     NotificationService.instance.init(navigatorKey: navigatorKey);
   } catch (e) {
     print('Firebase initialization error: $e');
@@ -137,7 +140,6 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      final fcmToken = await FirebaseMessaging.instance.getToken();
       final uri = Uri.parse('${ApiService.baseUrl}/login');
       final resp = await http
           .post(
@@ -146,7 +148,6 @@ class _LoginPageState extends State<LoginPage> {
             body: jsonEncode({
               'email': email,
               'password': password,
-              'firebase_token': fcmToken,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -163,11 +164,7 @@ class _LoginPageState extends State<LoginPage> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Login successful')));
 
-        // After login, request permission and register token with backend
-        final fcmToken = await NotificationService.instance
-            .requestPermissionAndGetToken(accessToken: accessToken);
-
-        // Save or remove cached credentials
+        // Save credentials first so sendTokenToServer can read accessToken from prefs.
         final prefs = await SharedPreferences.getInstance();
         if (_keepMeLoggedIn) {
           await prefs.setBool('keepMeLoggedIn', true);
@@ -178,7 +175,6 @@ class _LoginPageState extends State<LoginPage> {
           await prefs.remove('email');
           await prefs.remove('password');
         }
-
         if (accessToken != null) {
           await prefs.setString('accessToken', accessToken);
         }
@@ -186,10 +182,14 @@ class _LoginPageState extends State<LoginPage> {
           await prefs.setString('user', jsonEncode(user));
         }
 
-        if (!mounted) return;
+        // Request permission and register FCM token with backend (non-fatal).
+        try {
+          await NotificationService.instance.requestPermissionAndGetToken();
+        } catch (e) {
+          debugPrint('FCM token registration failed (non-fatal): $e');
+        }
 
-        // Print token for debugging
-        debugPrint('Device FCM token after login: $fcmToken');
+        if (!mounted) return;
 
         // Redirect to Home Page
         Navigator.pushReplacement(
