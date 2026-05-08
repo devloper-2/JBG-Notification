@@ -4,7 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'home_page.dart';
@@ -140,6 +139,8 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
+      final fcmToken = await NotificationService.instance.getToken();
+
       final uri = Uri.parse('${ApiService.baseUrl}/login');
       final resp = await http
           .post(
@@ -148,6 +149,7 @@ class _LoginPageState extends State<LoginPage> {
             body: jsonEncode({
               'email': email,
               'password': password,
+              'firebase_token': fcmToken,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -160,11 +162,10 @@ class _LoginPageState extends State<LoginPage> {
         final user = body['user'] as Map<String, dynamic>?;
 
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Login successful')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Login successful')),
+        );
 
-        // Save credentials first so sendTokenToServer can read accessToken from prefs.
         final prefs = await SharedPreferences.getInstance();
         if (_keepMeLoggedIn) {
           await prefs.setBool('keepMeLoggedIn', true);
@@ -180,13 +181,6 @@ class _LoginPageState extends State<LoginPage> {
         }
         if (user != null) {
           await prefs.setString('user', jsonEncode(user));
-        }
-
-        // Request permission and register FCM token with backend (non-fatal).
-        try {
-          await NotificationService.instance.requestPermissionAndGetToken();
-        } catch (e) {
-          debugPrint('FCM token registration failed (non-fatal): $e');
         }
 
         if (!mounted) return;

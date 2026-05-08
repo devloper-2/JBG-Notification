@@ -2,9 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
-import 'main.dart'; // To access LoginPage if needed or just use PushReplacement
+import 'main.dart';
 import 'services/api_service.dart';
-import 'services/notification_service.dart';
 import 'widgets/filter_screen.dart';
 import 'day_end_page.dart';
 
@@ -26,15 +25,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadUser();
-    _registerFcmToken();
-  }
-
-  Future<void> _registerFcmToken() async {
-    try {
-      await NotificationService.instance.requestPermissionAndGetToken();
-    } catch (e) {
-      debugPrint('FCM token retry on home page failed (non-fatal): $e');
-    }
   }
 
   Future<void> _loadUser() async {

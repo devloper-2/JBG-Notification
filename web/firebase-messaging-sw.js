@@ -1,6 +1,11 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
+// skipWaiting activates this SW immediately on first install so getToken() works on first login.
+// No clients.claim() — avoids conflicting with Flutter's own service worker.
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
 
 firebase.initializeApp({
   apiKey: "AIzaSyDxYURwnQj3z0OmDd-huEIX1w_UnxnY1oc",
@@ -22,11 +27,20 @@ messaging.onBackgroundMessage((payload) => {
     body: payload.notification?.body || '',
     icon: '/icons/Icon-192.png',
     badge: '/icons/Icon-192.png',
+    vibrate: [200, 100, 200],
+    tag: 'jbg-order',
+    renotify: true,
     data: payload.data || {},
-    requireInteraction: false,
+    requireInteraction: true,
   };
 
-  return self.registration.showNotification(title, options);
+  if (payload.notification?.image) {
+    options.image = payload.notification.image;
+  }
+
+  return self.registration.showNotification(title, options)
+    .then(() => console.log('[SW] Notification shown successfully'))
+    .catch(err => console.error('[SW] showNotification failed:', err));
 });
 
 // Handle notification click
