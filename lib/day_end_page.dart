@@ -251,11 +251,11 @@ class _DayEndPageState extends State<DayEndPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               _buildInfoColumn(
-                                "Opening Bal",
-                                "\u20B9${formatCurrency(sheet['opening_balance'])}",
+                                "Starting Balance",
+                                "\u20B9${formatCurrency(sheet['starting_balance'])}",
                               ),
                               _buildInfoColumn(
-                                "Closing Bal",
+                                "Closing Balance",
                                 "\u20B9${formatCurrency(sheet['closing_balance'])}",
                                 alignment: CrossAxisAlignment.end,
                               ),
@@ -267,11 +267,11 @@ class _DayEndPageState extends State<DayEndPage> {
                             children: [
                               _buildInfoColumn(
                                 "Cash Sales",
-                                "\u20B9${formatCurrency(sheet['cash_sales'])}",
+                                "\u20B9${formatCurrency(sheet['sale_amount_cash'])}",
                               ),
                               _buildInfoColumn(
                                 "Card Sales",
-                                "\u20B9${formatCurrency(sheet['card_sales'])}",
+                                "\u20B9${formatCurrency(sheet['sale_amount_card'])}",
                                 alignment: CrossAxisAlignment.end,
                               ),
                             ],
@@ -282,11 +282,26 @@ class _DayEndPageState extends State<DayEndPage> {
                             children: [
                               _buildInfoColumn(
                                 "Swiggy Sales",
-                                "\u20B9${formatCurrency(sheet['swiggy_sales'])}",
+                                "\u20B9${formatCurrency(sheet['sale_amount_swiggy'])}",
                               ),
                               _buildInfoColumn(
                                 "Zomato Sales",
-                                "\u20B9${formatCurrency(sheet['zomato_sales'])}",
+                                "\u20B9${formatCurrency(sheet['sale_amount_zomato'])}",
+                                alignment: CrossAxisAlignment.end,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildInfoColumn(
+                                "Expense Amount",
+                                "\u20B9${formatCurrency(sheet['expense_amount'])}",
+                              ),
+                              _buildInfoColumn(
+                                "Withdraw Balance",
+                                "\u20B9${formatCurrency(sheet['withdraw_balance'])}",
                                 alignment: CrossAxisAlignment.end,
                               ),
                             ],
