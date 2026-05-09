@@ -13,16 +13,14 @@ import 'firebase_options.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    NotificationService.instance.init(navigatorKey: navigatorKey);
-  } catch (e) {
-    print('Firebase initialization error: $e');
-  }
+
+  // Fire-and-forget: the app renders immediately. Firebase and notification
+  // listeners are set up in the background. Any failure is caught and logged.
+  Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
+      .then((_) => NotificationService.instance.init(navigatorKey: navigatorKey))
+      .catchError((Object e) => debugPrint('Firebase init error: $e'));
 
   runApp(const MyApp());
 }

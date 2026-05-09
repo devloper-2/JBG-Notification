@@ -75,8 +75,8 @@ class _HomePageState extends State<HomePage> {
           child: Container(color: Colors.black12, height: 1.0),
         ),
       ),
-      body: _currentIndex == 0 ? _HomeContent(user: _user, isAdmin: _isAdmin) : 
-            _currentIndex == 1 ? DayEndPage(user: _user, isAdmin: _isAdmin, outlets: _outlets) : 
+      body: _currentIndex == 0 ? _HomeContent(user: _user, isAdmin: _isAdmin, outlets: _outlets) :
+            _currentIndex == 1 ? DayEndPage(user: _user, isAdmin: _isAdmin, outlets: _outlets) :
             const _SettingsContent(),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -116,8 +116,9 @@ class _HomePageState extends State<HomePage> {
 class _HomeContent extends StatefulWidget {
   final Map<String, dynamic>? user;
   final bool isAdmin;
+  final List<dynamic> outlets;
 
-  const _HomeContent({required this.user, required this.isAdmin});
+  const _HomeContent({required this.user, required this.isAdmin, required this.outlets});
 
   @override
   State<_HomeContent> createState() => _HomeContentState();
@@ -125,7 +126,6 @@ class _HomeContent extends StatefulWidget {
 
 class _HomeContentState extends State<_HomeContent> {
   final ApiService _apiService = ApiService();
-  List<dynamic> _outlets = [];
   int? _selectedOutletId;
   List<dynamic> _orders = [];
   bool _isLoading = false;
@@ -136,7 +136,7 @@ class _HomeContentState extends State<_HomeContent> {
   String _orderType = 'all';
   DateTime? _startDate;
   DateTime? _endDate;
-  
+
   double _totalAmount = 0.0;
   int _totalOrdersCount = 0;
 
@@ -154,33 +154,34 @@ class _HomeContentState extends State<_HomeContent> {
     if (widget.user != null && oldWidget.user == null) {
       _initData();
     }
+    // When parent's outlets arrive for the first time, kick off orders load
+    if (widget.isAdmin &&
+        widget.outlets.isNotEmpty &&
+        oldWidget.outlets.isEmpty &&
+        _selectedOutletId == null) {
+      setState(() {
+        _selectedOutletId = widget.outlets.first['id'] is int
+            ? widget.outlets.first['id']
+            : int.tryParse(widget.outlets.first['id'].toString());
+      });
+      _loadOrders();
+    }
   }
 
   Future<void> _initData() async {
     if (widget.isAdmin) {
-      await _loadOutlets();
+      if (widget.outlets.isNotEmpty) {
+        setState(() {
+          _selectedOutletId = widget.outlets.first['id'] is int
+              ? widget.outlets.first['id']
+              : int.tryParse(widget.outlets.first['id'].toString());
+        });
+        await _loadOrders();
+      }
+      // else: outlets not loaded yet — didUpdateWidget will trigger when they arrive
     } else {
       _selectedOutletId = widget.user?['customer_id'];
       await _loadOrders();
-    }
-  }
-
-  Future<void> _loadOutlets() async {
-    try {
-      final outlets = await _apiService.getOutlets();
-      if (mounted) {
-        setState(() {
-          _outlets = outlets;
-          if (_outlets.isNotEmpty) {
-            _selectedOutletId = _outlets.first['id'];
-          }
-        });
-        if (_selectedOutletId != null) {
-          _loadOrders();
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading outlets: $e');
     }
   }
 
@@ -298,7 +299,7 @@ class _HomeContentState extends State<_HomeContent> {
                         icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black),
                         hint: const Text('Select Outlet', style: TextStyle(color: Colors.black54)),
                         style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-                        items: _outlets.where((o) => o['id'] != null).map<DropdownMenuItem<int>>((outlet) {
+                        items: widget.outlets.where((o) => o['id'] != null).map<DropdownMenuItem<int>>((outlet) {
                           return DropdownMenuItem<int>(
                             value: outlet['id'] is int ? outlet['id'] : int.tryParse(outlet['id'].toString()),
                             child: Text(outlet['name'] ?? 'Unknown Outlet'),
