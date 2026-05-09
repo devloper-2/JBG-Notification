@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JBG Debug</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 20px; background: #f5f5f5; }
+    h2  { font-size: 18px; margin: 0 0 16px; }
+    .row { background: white; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; font-size: 14px; word-break: break-all; }
+    .label { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
+    .val   { font-weight: 600; }
+    .ok    { color: #1a9e4a; }
+    .warn  { color: #e07b00; }
+    .err   { color: #d0021b; }
+    button { display: block; width: 100%; padding: 14px; background: #000; color: #fff;
+             border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
+             margin-top: 16px; cursor: pointer; }
+    #log   { background: #1a1a1a; color: #0f0; border-radius: 8px; padding: 12px;
+             font-family: monospace; font-size: 12px; white-space: pre-wrap;
+             min-height: 120px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h2>JBG Notification Diagnostics</h2>
+
+  <div class="row">
+    <div class="label">Notification API</div>
+    <div class="val" id="r-notif">checking…</div>
+  </div>
+  <div class="row">
+    <div class="label">Permission</div>
+    <div class="val" id="r-perm">checking…</div>
+  </div>
+  <div class="row">
+    <div class="label">PushManager API</div>
+    <div class="val" id="r-push">checking…</div>
+  </div>
+  <div class="row">
+    <div class="label">Service Worker API</div>
+    <div class="val" id="r-sw">checking…</div>
+  </div>
+  <div class="row">
+    <div class="label">Registered Service Workers</div>
+    <div class="val" id="r-regs">checking…</div>
+  </div>
+  <div class="row">
+    <div class="label">Display mode (PWA standalone?)</div>
+    <div class="val" id="r-display">checking…</div>
+  </div>
+  <div class="row">
+    <div class="label">User Agent</div>
+    <div class="val" id="r-ua" style="font-size:11px"></div>
+  </div>
+
+  <button id="btn-token">Tap to request notification permission + get token</button>
+
+  <div id="log">Tap the button above to run the full token flow…</div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+  <script>
+    var VAPID = 'BL7wtWV0SrcznOLOiglS1o42Ty6g03OuimhisbgpIaRv6R6TAJiWoiJQpqcZ6Ovl9EChMbcjLR7Br6SUUHhSGyw';
+    var log = document.getElementById('log');
+    function L(msg, cls) {
+      var line = document.createElement('div');
+      line.textContent = new Date().toISOString().slice(11,23) + '  ' + msg;
+      if (cls) line.style.color = cls === 'ok' ? '#0f0' : cls === 'warn' ? '#ff0' : '#f44';
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // --- Static checks ---
+    function c(id, val, cls) {
+      var el = document.getElementById(id);
+      el.textContent = val;
+      if (cls) el.className = 'val ' + cls;
+    }
+
+    c('r-ua', navigator.userAgent);
+    c('r-notif',
+      'Notification' in window ? 'Available' : 'NOT AVAILABLE',
+      'Notification' in window ? 'ok' : 'err');
+    c('r-perm',
+      'Notification' in window ? Notification.permission : 'n/a',
+      'Notification' in window
+        ? (Notification.permission === 'granted' ? 'ok' : Notification.permission === 'denied' ? 'err' : 'warn')
+        : 'err');
+    c('r-push',
+      'PushManager' in window ? 'Available' : 'NOT AVAILABLE',
+      'PushManager' in window ? 'ok' : 'err');
+    c('r-sw',
+      'serviceWorker' in navigator ? 'Available' : 'NOT AVAILABLE',
+      'serviceWorker' in navigator ? 'ok' : 'err');
+    c('r-display',
+      window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+        ? 'standalone (PWA)' : 'browser tab',
+      window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+        ? 'ok' : 'warn');
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        if (regs.length === 0) {
+          c('r-regs', 'None', 'warn');
+        } else {
+          c('r-regs', regs.map(function(r) {
+            return r.scope + ' [' + (r.active ? 'active' : r.waiting ? 'waiting' : 'installing') + ']';
+          }).join('\n'));
+        }
+      });
+    } else {
+      c('r-regs', 'n/a', 'err');
+    }
+
+    // --- Button: full token flow ---
+    document.getElementById('btn-token').addEventListener('click', async function() {
+      this.disabled = true;
+      this.textContent = 'Running…';
+      log.innerHTML = '';
+      L('--- Starting token flow ---');
+
+      try {
+        // 1. Init Firebase
+        if (!firebase.apps.length) {
+          firebase.initializeApp({
+            apiKey:            'AIzaSyDxYURwnQj3z0OmDd-huEIX1w_UnxnY1oc',
+            authDomain:        'jgb-codezpark.firebaseapp.com',
+            projectId:         'jgb-codezpark',
+            storageBucket:     'jgb-codezpark.firebasestorage.app',
+            messagingSenderId: '441380081715',
+            appId:             '1:441380081715:web:28657c6b6755604136d346',
+          });
+        }
+        L('Firebase initialised');
+
+        // 2. Register SW
+        L('Registering service worker…');
+        var swReg = null;
+        try {
+          swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+            scope: '/firebase-cloud-messaging-push-scope'
+          });
+          L('SW registered, scope=' + swReg.scope);
+          if (!swReg.active) {
+            L('SW not yet active, waiting…', 'warn');
+            var sw = swReg.installing || swReg.waiting;
+            if (sw) {
+              await new Promise(function(res) {
+                sw.addEventListener('statechange', function() {
+                  if (sw.state === 'activated') res();
+                });
+              });
+            }
+          }
+          L('SW active: ' + (swReg.active ? swReg.active.scriptURL : 'none'), 'ok');
+        } catch(e) {
+          L('SW registration FAILED: ' + e, 'err');
+        }
+
+        // 3. Request permission
+        L('Calling Notification.requestPermission()…');
+        var perm = await Notification.requestPermission();
+        L('Permission result: ' + perm, perm === 'granted' ? 'ok' : 'err');
+        // Refresh permission row
+        c('r-perm', perm, perm === 'granted' ? 'ok' : perm === 'denied' ? 'err' : 'warn');
+
+        if (perm !== 'granted') {
+          L('Cannot get token without permission.', 'err');
+          this.disabled = false;
+          this.textContent = 'Tap to retry';
+          return;
+        }
+
+        // 4. Get token
+        L('Calling firebase.messaging().getToken()…');
+        var token = null;
+        try {
+          var msg = firebase.messaging();
+          token = await msg.getToken({
+            vapidKey: VAPID,
+            serviceWorkerRegistration: swReg || undefined
+          });
+          L('Token: ' + (token ? token.substring(0,30) + '…' : 'null'), token ? 'ok' : 'err');
+        } catch(e) {
+          L('getToken FAILED: ' + e, 'err');
+        }
+
+        if (token) {
+          L('SUCCESS! Full token: ' + token, 'ok');
+        } else {
+          L('Token is null — push notifications will not work.', 'err');
+        }
+
+      } catch(outer) {
+        L('Unhandled error: ' + outer, 'err');
+      }
+
+      this.disabled = false;
+      this.textContent = 'Tap to run again';
+    });
+  </script>
+</body>
+</html>
