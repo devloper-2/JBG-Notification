@@ -266,6 +266,21 @@ class _DayEndPageState extends State<DayEndPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               _buildInfoColumn(
+                                "Add Balance",
+                                "\u20B9${formatCurrency(sheet['add_balance'])}",
+                              ),
+                              _buildInfoColumn(
+                                "Total Sale Amount",
+                                "\u20B9${formatCurrency(sheet['sale_amount'])}",
+                                alignment: CrossAxisAlignment.end,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildInfoColumn(
                                 "Cash Sales",
                                 "\u20B9${formatCurrency(sheet['sale_amount_cash'])}",
                               ),

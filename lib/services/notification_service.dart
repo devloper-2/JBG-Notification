@@ -46,7 +46,13 @@ class NotificationService {
         // On web, the full permission + token flow runs inside a native JS
         // button click so the user-gesture requirement is met on every browser
         // (iOS WebKit, Android Chrome, desktop). See web/index.html.
-        return await getWebToken();
+        return await getWebToken().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint('FCM web token retrieval timed out');
+            return null;
+          },
+        );
       }
 
       // Native iOS / Android path.
