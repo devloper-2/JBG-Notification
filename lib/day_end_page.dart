@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../widgets/outlet_picker.dart';
 
 class DayEndPage extends StatefulWidget {
   final Map<String, dynamic>? user;
@@ -118,50 +119,17 @@ class _DayEndPageState extends State<DayEndPage> {
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.black26),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  isExpanded: true,
-                  value: _selectedOutletId,
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Colors.black,
-                  ),
-                  hint: const Text(
-                    'Select Outlet',
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  items: widget.outlets
-                      .where((o) => o['id'] != null)
-                      .map<DropdownMenuItem<int>>((outlet) {
-                        return DropdownMenuItem<int>(
-                          value: outlet['id'] is int
-                              ? outlet['id']
-                              : int.tryParse(outlet['id'].toString()),
-                          child: Text(outlet['name'] ?? 'Unknown Outlet'),
-                        );
-                      })
-                      .toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      _selectedOutletId = val;
-                    });
-                    if (val != null) {
-                      _loadData();
-                    }
-                  },
-                ),
-              ),
+            child: OutletPickerField(
+              outlets: widget.outlets,
+              selectedOutletId: _selectedOutletId,
+              onChanged: (val) {
+                setState(() {
+                  _selectedOutletId = val;
+                });
+                if (val != null) {
+                  _loadData();
+                }
+              },
             ),
           ),
         Expanded(

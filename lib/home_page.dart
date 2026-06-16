@@ -5,6 +5,7 @@ import 'package:shimmer/shimmer.dart';
 import 'main.dart';
 import 'services/api_service.dart';
 import 'widgets/filter_screen.dart';
+import 'widgets/outlet_picker.dart';
 import 'day_end_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -78,35 +79,40 @@ class _HomePageState extends State<HomePage> {
       body: _currentIndex == 0 ? _HomeContent(user: _user, isAdmin: _isAdmin, outlets: _outlets) :
             _currentIndex == 1 ? DayEndPage(user: _user, isAdmin: _isAdmin, outlets: _outlets) :
             const _SettingsContent(),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Colors.black12, width: 1.0)),
-        ),
-        child: BottomNavigationBar(
-          backgroundColor: Colors.white,
-          selectedItemColor: Colors.black,
-          unselectedItemColor: Colors.black45,
-          elevation: 0,
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_long),
-              label: 'Orders',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart),
-              label: 'Day End',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
+      // SafeArea ensures the bottom nav is not hidden under the iOS home
+      // indicator / virtual home bar in standalone (PWA) mode.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Colors.black12, width: 1.0)),
+          ),
+          child: BottomNavigationBar(
+            backgroundColor: Colors.white,
+            selectedItemColor: Colors.black,
+            unselectedItemColor: Colors.black45,
+            elevation: 0,
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.receipt_long),
+                label: 'Orders',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.bar_chart),
+                label: 'Day End',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings),
+                label: 'Settings',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -286,35 +292,17 @@ class _HomeContentState extends State<_HomeContent> {
             children: [
               if (widget.isAdmin)
                 Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.black26),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<int>(
-                        isExpanded: true,
-                        value: _selectedOutletId,
-                        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black),
-                        hint: const Text('Select Outlet', style: TextStyle(color: Colors.black54)),
-                        style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-                        items: widget.outlets.where((o) => o['id'] != null).map<DropdownMenuItem<int>>((outlet) {
-                          return DropdownMenuItem<int>(
-                            value: outlet['id'] is int ? outlet['id'] : int.tryParse(outlet['id'].toString()),
-                            child: Text(outlet['name'] ?? 'Unknown Outlet'),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedOutletId = val;
-                          });
-                          if (val != null) {
-                            _loadOrders();
-                          }
-                        },
-                      ),
-                    ),
+                  child: OutletPickerField(
+                    outlets: widget.outlets,
+                    selectedOutletId: _selectedOutletId,
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedOutletId = val;
+                      });
+                      if (val != null) {
+                        _loadOrders();
+                      }
+                    },
                   ),
                 )
               else
