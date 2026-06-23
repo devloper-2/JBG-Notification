@@ -24,10 +24,30 @@ class _DayEndPageState extends State<DayEndPage> {
   List<dynamic> _balanceSheets = [];
   bool _isLoading = false;
 
+  final ScrollController _scrollController = ScrollController();
+  int _visibleCount = 50;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_scrollListener);
     _initData();
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 500) {
+      if (_visibleCount < _balanceSheets.length) {
+        setState(() {
+          _visibleCount += 50;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -68,6 +88,7 @@ class _DayEndPageState extends State<DayEndPage> {
       if (mounted) {
         setState(() {
           _balanceSheets = resp['data'] ?? [];
+          _visibleCount = 50;
           _isLoading = false;
         });
       }
@@ -143,8 +164,9 @@ class _DayEndPageState extends State<DayEndPage> {
                   ),
                 )
               : ListView.separated(
+                  controller: _scrollController,
                   padding: const EdgeInsets.all(16),
-                  itemCount: _balanceSheets.length,
+                  itemCount: _visibleCount > _balanceSheets.length ? _balanceSheets.length : _visibleCount,
                   separatorBuilder: (context, index) =>
                       const SizedBox(height: 16),
                   itemBuilder: (context, index) {

@@ -146,12 +146,32 @@ class _HomeContentState extends State<_HomeContent> {
   double _totalAmount = 0.0;
   int _totalOrdersCount = 0;
 
+  final ScrollController _scrollController = ScrollController();
+  int _visibleCount = 50;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_scrollListener);
     if (widget.user != null) {
       _initData();
     }
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 500) {
+      if (_visibleCount < _orders.length) {
+        setState(() {
+          _visibleCount += 50;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -239,6 +259,7 @@ class _HomeContentState extends State<_HomeContent> {
               return sum + amount;
             });
           }
+          _visibleCount = 50; // Reset visible count when new data is loaded
           _isLoading = false;
         });
       }
@@ -367,7 +388,8 @@ class _HomeContentState extends State<_HomeContent> {
               : _orders.isEmpty
                   ? const Center(child: Text('No orders found.'))
                   : ListView.builder(
-                      itemCount: _orders.length,
+                      controller: _scrollController,
+                      itemCount: _visibleCount > _orders.length ? _orders.length : _visibleCount,
                       itemBuilder: (context, index) {
                         final order = _orders[index];
                         final rawCusName = order['customer_name']?.toString();
