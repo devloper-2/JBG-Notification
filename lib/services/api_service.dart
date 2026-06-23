@@ -1,6 +1,12 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Top-level function so it can be used with compute() for background JSON parsing.
+Map<String, dynamic> _parseJson(String body) {
+  return jsonDecode(body) as Map<String, dynamic>;
+}
 
 class ApiService {
   // static const String baseUrl = 'http://192.168.1.6:8765/api';
@@ -56,8 +62,8 @@ class ApiService {
     final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
-      // Typically { success: boolean, count: number, data: any[] }
-      return jsonDecode(response.body);
+      // Parse in background isolate to avoid freezing UI on large responses
+      return await compute(_parseJson, response.body);
     } else {
       throw Exception('Failed to load admin orders: ${response.statusCode}');
     }
@@ -114,7 +120,7 @@ class ApiService {
     final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      return await compute(_parseJson, response.body);
     } else {
       throw Exception('Failed to load balance sheet: ${response.statusCode}');
     }

@@ -140,8 +140,8 @@ class _HomeContentState extends State<_HomeContent> {
   String _paymentMethod = 'all';
   String _status = 'all';
   String _orderType = 'all';
-  DateTime? _startDate;
-  DateTime? _endDate;
+  DateTime? _startDate = DateTime.now();
+  DateTime? _endDate = DateTime.now();
 
   double _totalAmount = 0.0;
   int _totalOrdersCount = 0;
