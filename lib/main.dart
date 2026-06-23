@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
 import 'home_page.dart';
 import 'services/notification_service.dart';
@@ -198,6 +199,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _submit() {
+    TextInput.finishAutofillContext();
     _performLogin();
   }
 
@@ -310,9 +312,10 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 420),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
+                    child: AutofillGroup(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const SizedBox(height: 20),
@@ -344,6 +347,7 @@ class _LoginPageState extends State<LoginPage> {
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.email, AutofillHints.username],
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -372,6 +376,7 @@ class _LoginPageState extends State<LoginPage> {
                             controller: _passwordController,
                             obscureText: _obscurePassword,
                             textInputAction: TextInputAction.done,
+                            autofillHints: const [AutofillHints.password],
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -464,6 +469,7 @@ class _LoginPageState extends State<LoginPage> {
                           const SizedBox(height: 40),
                         ],
                       ),
+                    ),
                     ),
                   ),
                 ),
