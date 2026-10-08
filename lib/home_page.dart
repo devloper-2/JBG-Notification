@@ -1512,7 +1512,7 @@ class _HomeContentState extends State<_HomeContent> {
           'name': name,
           'quantity': qty,
           'price': price,
-          'total': price * (qty is num ? (qty as num).toDouble() : 1.0),
+          'total': price * (qty is num ? qty.toDouble() : 1.0),
         };
       }
       return <String, dynamic>{};
@@ -1644,7 +1644,6 @@ class _SettingsContent extends StatefulWidget {
   final List<dynamic> outlets;
 
   const _SettingsContent({
-    super.key,
     this.user,
     this.isAdmin = false,
     this.outlets = const [],
@@ -1662,24 +1661,93 @@ class _SettingsContentState extends State<_SettingsContent> {
   bool _isSavingAll = false;
   String _outletSearchQuery = '';
 
+  int? get _effectiveBranchOutletId {
+    final rawId = widget.user?['customer_id'] ??
+        widget.user?['customerId'] ??
+        widget.user?['outlet_id'] ??
+        widget.user?['outletId'];
+    if (rawId == null) return null;
+    return rawId is int ? rawId : int.tryParse(rawId.toString());
+  }
+
+  String _branchOutletName = '';
+  bool _isLoadingBranchSetting = false;
+
   @override
   void initState() {
     super.initState();
     _outlets = List<dynamic>.from(widget.outlets);
     _initSettingsFromOutlets();
-    if (_outlets.isEmpty && widget.isAdmin) {
-      _loadOutlets();
+    if (widget.isAdmin) {
+      if (_outlets.isEmpty) {
+        _loadOutlets();
+      }
+    } else {
+      _initBranchUser();
     }
   }
 
   @override
   void didUpdateWidget(covariant _SettingsContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.outlets != oldWidget.outlets && widget.outlets.isNotEmpty) {
-      setState(() {
-        _outlets = List<dynamic>.from(widget.outlets);
-        _initSettingsFromOutlets();
-      });
+    if (widget.isAdmin) {
+      if (widget.outlets != oldWidget.outlets && widget.outlets.isNotEmpty) {
+        setState(() {
+          _outlets = List<dynamic>.from(widget.outlets);
+          _initSettingsFromOutlets();
+        });
+      }
+    } else {
+      final oldId = oldWidget.user?['customer_id'] ??
+          oldWidget.user?['customerId'] ??
+          oldWidget.user?['outlet_id'] ??
+          oldWidget.user?['outletId'];
+      final newId = _effectiveBranchOutletId;
+      if (newId != oldId || (_effectiveBranchOutletId != null && _settlementSettings[_effectiveBranchOutletId] == null && !_isLoadingBranchSetting)) {
+        _initBranchUser();
+      }
+    }
+  }
+
+  void _initBranchUser() {
+    final id = _effectiveBranchOutletId;
+    if (id != null && id > 0) {
+      _loadBranchOutletSetting(id);
+    }
+  }
+
+  Future<void> _loadBranchOutletSetting(int outletId) async {
+    setState(() {
+      _isLoadingBranchSetting = true;
+    });
+    try {
+      final res = await _apiService.getSettlementSetting(outletId);
+      if (res['success'] == true && res['data'] != null) {
+        final data = res['data'];
+        final val = data['allow_settlement_total_edit'];
+        final isAllowed = val == null || val == true || val == 1 || val == '1';
+        final name = data['name']?.toString() ?? 'Outlet #$outletId';
+        if (mounted) {
+          setState(() {
+            _branchOutletName = name;
+            _settlementSettings[outletId] = isAllowed;
+            _isLoadingBranchSetting = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoadingBranchSetting = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading branch settlement setting: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingBranchSetting = false;
+        });
+      }
     }
   }
 
@@ -1856,6 +1924,24 @@ class _SettingsContentState extends State<_SettingsContent> {
                           ),
                         ),
                       ),
+                      if (!widget.isAdmin && _effectiveBranchOutletId != null && _effectiveBranchOutletId! > 0) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.storefront_outlined, size: 14, color: Colors.black54),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                _branchOutletName.isNotEmpty
+                                    ? '$_branchOutletName (#$_effectiveBranchOutletId)'
+                                    : 'Outlet #$_effectiveBranchOutletId',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -2117,6 +2203,163 @@ class _SettingsContentState extends State<_SettingsContent> {
                             ),
                           );
                         },
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+          ]
+          // Settlement Permissions Section for Individual Branch User
+          else if (_effectiveBranchOutletId != null && _effectiveBranchOutletId! > 0) ...[
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.black12),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x08000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Section Header
+                  Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.point_of_sale_rounded, color: Colors.black, size: 24),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Settlement Permissions',
+                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Control bill total editing in POS settlement',
+                                style: TextStyle(fontSize: 12, color: Colors.black54),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_isLoadingBranchSetting)
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                          )
+                        else
+                          IconButton(
+                            icon: const Icon(Icons.refresh, size: 20),
+                            onPressed: () => _loadBranchOutletSetting(_effectiveBranchOutletId!),
+                            tooltip: 'Refresh setting',
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // Info Notice
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.shade200),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, size: 18, color: Colors.amber.shade900),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'When permission is ON (default), POS can edit the final total during settlement. When turned OFF, POS can still settle to change payment methods, but CANNOT modify the bill total.',
+                            style: TextStyle(fontSize: 12, color: Colors.amber.shade900, height: 1.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+
+                  // Outlet Setting Row
+                  Builder(
+                    builder: (context) {
+                      final id = _effectiveBranchOutletId!;
+                      final name = _branchOutletName.isNotEmpty ? _branchOutletName : 'Outlet #$id';
+                      final isEnabled = _settlementSettings[id] ?? true;
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade200,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          '#$id',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.grey.shade800,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          name,
+                                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isEnabled
+                                        ? 'Total editing enabled'
+                                        : 'Total locked (methods only)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isEnabled ? Colors.green.shade700 : Colors.red.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: isEnabled,
+                              activeColor: Colors.black,
+                              onChanged: (val) => _toggleOutletSetting(id, val, name),
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
